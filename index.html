@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Crypto Dashboard H4</title>
+<style>
+:root{--bg:#0f1115;--card:#181b22;--line:#2a2f3a;--txt:#e6e8ec;--mut:#8b93a3;--up:#16c784;--dn:#ea3943;--neu:#f0b90b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 system-ui,sans-serif}
+.wrap{max-width:1200px;margin:auto;padding:16px}
+h1{font-size:20px;margin:0 0 4px}.mut{color:var(--mut);font-size:12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin:16px 0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;cursor:pointer}
+.card.on{border-color:var(--neu)}
+.px{font-size:20px;font-weight:600}.up{color:var(--up)}.dn{color:var(--dn)}
+.tag{display:inline-block;padding:2px 8px;border-radius:6px;font-weight:700;font-size:12px}
+.LONG{background:#16c78422;color:var(--up)}.SHORT{background:#ea394322;color:var(--dn)}.NEUTRAL{background:#f0b90b22;color:var(--neu)}
+#chart{height:480px;border-radius:10px;overflow:hidden;border:1px solid var(--line)}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+@media(max-width:800px){.cols{grid-template-columns:1fr}#chart{height:380px}}
+.box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
+.box h3{margin:0 0 8px;font-size:15px}
+table{width:100%;border-collapse:collapse}td{padding:4px 0;border-bottom:1px solid var(--line)}td:last-child{text-align:right}
+a{color:#6ea8fe;text-decoration:none}a:hover{text-decoration:underline}
+.mv{margin-bottom:10px}.warn{background:#f0b90b14;border:1px solid #f0b90b55;border-radius:10px;padding:10px;margin-top:16px;font-size:12px;color:var(--mut)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📊 Crypto Dashboard – khung H4</h1>
+  <div class="mut" id="upd">Đang tải…</div>
+  <div class="grid" id="cards"></div>
+  <div id="chart"></div>
+  <div class="cols">
+    <div class="box"><h3>🎯 Tín hiệu &amp; đề xuất lệnh</h3><div id="sig"></div></div>
+    <div class="box"><h3>📰 Tin tức khi giá biến động ≥ <span id="th">3</span>% (H4)</h3><div id="news"></div></div>
+  </div>
+  <div class="warn">⚠️ Tín hiệu được tính tự động từ chỉ báo kỹ thuật (EMA 20/50/200, RSI, MACD, ATR). “Dự báo” là thống kê quá khứ, <b>không phải</b> dự đoán chắc chắn. Chỉ để tham khảo, không phải lời khuyên đầu tư. Tự chịu trách nhiệm khi vào lệnh.</div>
+</div>
+<script src="https://s3.tradingview.com/tv.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const f=(n,d)=>n==null?'–':Number(n).toLocaleString('en-US',{maximumFractionDigits:d??(Math.abs(n)<10?4:2)});
+const pc=n=>`<span class="${n>=0?'up':'dn'}">${n>=0?'▲':'▼'} ${Math.abs(n).toFixed(2)}%</span>`;
+const dt=t=>new Date(t).toLocaleString('vi-VN',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'});
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const VI={LONG:'LONG – Mua',SHORT:'SHORT – Bán',NEUTRAL:'Đứng ngoài'};
+let D,cur=0;
+
+function spark(v){if(!v||v.length<2)return'';const mn=Math.min(...v),mx=Math.max(...v),w=200,h=36;
+  const pts=v.map((x,i)=>`${i/(v.length-1)*w},${h-(x-mn)/(mx-mn||1)*h}`).join(' ');
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="36"><polyline fill="none" stroke="${v.at(-1)>=v[0]?'#16c784':'#ea3943'}" stroke-width="1.5" points="${pts}"/></svg>`}
+
+function cards(){$('cards').innerHTML=D.assets.map((a,i)=>a.error?
+  `<div class="card" onclick="sel(${i})"><b>${a.name}</b><div class="mut">Lỗi lấy dữ liệu</div></div>`:
+  `<div class="card ${i==cur?'on':''}" onclick="sel(${i})">
+   <div style="display:flex;justify-content:space-between"><b>${a.id}</b><span class="tag ${a.signal}">${a.signal}</span></div>
+   <div class="px">${f(a.price)}${a.id=='BTC.D'?'%':''}</div>
+   <div class="mut">4h ${pc(a.chg4h)} · 24h ${pc(a.chg24h)}</div>${spark(a.spark)}</div>`).join('')}
+
+function chart(a){$('chart').innerHTML='';new TradingView.widget({container_id:'chart',autosize:true,symbol:a.tv,
+  interval:'240',theme:matchMedia('(prefers-color-scheme: light)').matches?'light':'dark',locale:'vi_VN',
+  studies:['RSI@tv-basicstudies','MACD@tv-basicstudies'],hide_side_toolbar:false})}
+
+function sig(a){if(a.error){$('sig').innerHTML=`<div class="mut">${esc(a.error)}</div>`;return}
+  const i=a.ind,o=a.order,fc=a.forecast;
+  let h=`<div style="margin-bottom:8px"><span class="tag ${a.signal}" style="font-size:14px">${VI[a.signal]}</span>
+   <span class="mut"> điểm ${a.score>0?'+':''}${a.score} / ±5 · nến đóng ${dt(a.t)}</span></div>`;
+  if(fc)h+=`<p>📈 <b>Dự báo 24h (thống kê):</b> trong ${fc.n} lần có tín hiệu tương tự trước đây, giá 24h sau thay đổi trung bình ${pc(fc.avg)}, tỷ lệ tăng <b>${fc.up.toFixed(0)}%</b>.</p>`;
+  if(o)h+=`<table><tr><td>Lệnh</td><td><b class="${o.side=='LONG'?'up':'dn'}">${o.side}</b></td></tr>
+   <tr><td>Điểm vào</td><td>${f(o.entry)}</td></tr><tr><td>Stop Loss (1.5 ATR)</td><td class="dn">${f(o.sl)}</td></tr>
+   <tr><td>Take Profit 1 (1.5 ATR)</td><td class="up">${f(o.tp1)}</td></tr><tr><td>Take Profit 2 (3 ATR)</td><td class="up">${f(o.tp2)}</td></tr></table>`;
+  else h+=`<p class="mut">${a.id=='BTC.D'?'BTC.D là chỉ số, không đặt lệnh trực tiếp. Dùng để xem dòng tiền: BTC.D tăng → altcoin thường yếu.':'Tín hiệu chưa rõ → chưa đề xuất lệnh.'}</p>`;
+  h+=`<p class="mut">EMA20 ${f(i.ema20)} · EMA50 ${f(i.ema50)} · EMA200 ${f(i.ema200)} · RSI ${i.rsi.toFixed(1)} · MACD hist ${f(i.macd_hist)}</p>`;
+  $('sig').innerHTML=h}
+
+function news(a){const L=n=>`<div>• <a href="${esc(n.link)}" target="_blank" rel="noopener">${esc(n.title)}</a> <span class="mut">${esc(n.src)} · ${dt(n.t)}</span></div>`;
+  let h=(a.moves||[]).slice().reverse().map(m=>`<div class="mv"><b>${dt(m.t)}</b> ${pc(m.chg)}
+   ${m.news.length?m.news.map(L).join(''):'<div class="mut">Chưa tìm thấy tin liên quan</div>'}</div>`).join('');
+  if(!h)h='<div class="mut">Không có nến H4 nào biến động ≥ 3% gần đây.</div>';
+  if(a.latest_news?.length)h+=`<h3 style="margin-top:12px">Tin mới nhất</h3>${a.latest_news.map(L).join('')}`;
+  $('news').innerHTML=h}
+
+function sel(i){cur=i;cards();const a=D.assets[i];chart(a);sig(a);news(a)}
+
+fetch('data/dashboard.json?'+Date.now()).then(r=>r.json()).then(d=>{D=d;$('th').textContent=d.threshold;
+  $('upd').textContent='Cập nhật lúc '+new Date(d.updated).toLocaleString('vi-VN')+' · tự động mỗi 4 giờ';sel(0)})
+ .catch(()=>$('upd').textContent='Chưa có dữ liệu – hãy chạy workflow “Update data” lần đầu.');
+</script>
+</body>
+</html>
